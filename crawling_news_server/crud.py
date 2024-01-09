@@ -55,6 +55,19 @@ def update_rss_obj(db: Session, db_rss: models.RSS) -> models.RSS | None:
     return db_rss
 
 
+def update_rss_from_rss_dict(db: Session, rss_id: int, feed: dict[str, str | None]) -> None:
+    db_rss = get_rss(db, rss_id)
+
+    db_rss.title = feed.get("title", db_rss.title)
+    db_rss.description = feed.get("description", db_rss.description)
+    db_rss.language = feed.get("language", db_rss.language)
+    db_rss.copyright = feed.get("rights", db_rss.copyright)
+    db_rss.last_build_date = feed.get("updated", db_rss.last_build_date)
+    db_rss.web_master = feed.get("publisher", db_rss.web_master)
+
+    return update_rss_obj(db, db_rss)
+
+
 def get_rss_item_by_rss_id_and_link(db: Session, rss_id: int, link: str) -> models.RSSItem | None:
     return db.query(models.RSSItem).filter(models.RSSItem.rss_id == rss_id, models.RSSItem.link == link).first()
 

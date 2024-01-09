@@ -56,9 +56,10 @@ def crawling(rss_id: int, url: str):
 
     add_count = 0
     with get_context_db() as db:
+
         try:
             if not crud.get_rss(db, rss_id).is_active:
-                logging.info(f"[{rss_id:<10}]({url:<55}): Remove job")
+                logging.info(f"[{rss_id:<10}]({url:<55}): Not active rss, remove job")
                 scheduler.remove_job(f"{rss_id}")
                 return
 
@@ -73,16 +74,7 @@ def crawling(rss_id: int, url: str):
 
             rss_obj = rss_fixer.fix_rss(url, response.text)
 
-            db_rss = crud.get_rss(db, rss_id)
-
-            db_rss.title = rss_obj.get('feed', {}).get("title", db_rss.title)
-            db_rss.description = rss_obj.get('feed', {}).get("description", db_rss.description)
-            db_rss.language = rss_obj.get('feed', {}).get("language", db_rss.language)
-            db_rss.copyright = rss_obj.get('feed', {}).get("rights", db_rss.copyright)
-            db_rss.last_build_date = rss_obj.get('feed', {}).get("updated", db_rss.last_build_date)
-            db_rss.web_master = rss_obj.get('feed', {}).get("publisher", db_rss.web_master)
-
-            crud.update_rss_obj(db, db_rss)
+            crud.update_rss_from_rss_dict(db, rss_id, rss_obj.get("feed", {}))
 
             for item in rss_obj.entries:
                 db_rss_item = crud.get_rss_item_by_rss_id_and_link(db, rss_id, item.link)
@@ -106,20 +98,6 @@ def crawling(rss_id: int, url: str):
                     rss_item.author = item.get("author", None)
                     rss_item.category = item.get("category", None)
                     rss_item.pub_date = item.get("published", None)
-
-                    # try:
-                    #     rss_item.author = item.author
-                    # except Exception as e:
-                    #     logging.debug(f"[{rss_id:<10}]({url:<55}): author not exist: {e}")
-                    # try:
-                    #     rss_item.category = item.category
-                    # except Exception as e:
-                    #     logging.debug(f"[{rss_id:<10}]({url:<55}): category not exist: {e}")
-                    # try:
-                    #     rss_item.pub_date = item.published
-                    # except Exception as e:
-                    #     logging.debug(f"[{rss_id:<10}]({url:<55}): pub_date not exist: {e}")
-
                     crud.create_rss_item(db, rss_id, rss_item)
                     add_count += 1
                 except Exception as e:
@@ -168,7 +146,7 @@ def crawling(rss_id: int, url: str):
                 scheduler.remove_job(f"{rss_id}")
 
         except requests.exceptions.ConnectionError:
-            logging.info(f"[{rss_id:<10}]({url:<55}): Remove job")
+            logging.info(f"[{rss_id:<10}]({url:<55}): Connection Error, Remove job")
             crud.update_rss_active(db, rss_id, False)
             scheduler.remove_job(f"{rss_id}")
 
@@ -212,7 +190,12 @@ def init_data():
         for db_rss in db_rss_all:
             if not db_rss.is_active:
                 continue
-            add_job_rss_crawling(db_rss)
+            try:
+                # 기존 JOB이 있다면 유지
+                scheduler.get_job(f"{db_rss.id}")
+            except:
+                # 없으면 추가
+                add_job_rss_crawling(db_rss)
 
         scheduler.start()
 
