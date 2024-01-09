@@ -32,7 +32,6 @@ logging.getLogger('apscheduler').setLevel(logging.WARNING)
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
-
 jobstores = {}
 if os.environ.get("JOB_STORE"):
     jobstores['default'] = SQLAlchemyJobStore(url=os.environ.get("JOB_DB_PATH"), engine_options={'pool_size': 100})
@@ -53,7 +52,7 @@ app = FastAPI(
 
 
 def crawling(rss_id: int, url: str):
-    logging.info(f"Crawling {url}...")
+    logging.info(f"[{rss_id}]({url:<55}): Crawling...")
 
     add_count = 0
     with get_context_db() as db:
@@ -68,30 +67,38 @@ def crawling(rss_id: int, url: str):
             rss_obj = rss_fixer.fix_rss(url, response.text)
 
             db_rss = crud.get_rss(db, rss_id)
-            try:
-                db_rss.title = rss_obj['feed'].title
-            except:
-                pass
-            try:
-                db_rss.description = rss_obj['feed'].description
-            except:
-                pass
-            try:
-                db_rss.language = rss_obj['feed'].language
-            except:
-                pass
-            try:
-                db_rss.rights = rss_obj['feed'].rights
-            except:
-                pass
-            try:
-                db_rss.last_build_date = rss_obj['feed'].updated
-            except:
-                pass
-            try:
-                db_rss.web_master = rss_obj['feed'].publisher
-            except:
-                pass
+
+            db_rss.title = rss_obj.get('feed', {}).get("title", db_rss.title)
+            db_rss.description = rss_obj.get('feed', {}).get("description", db_rss.description)
+            db_rss.language = rss_obj.get('feed', {}).get("language", db_rss.language)
+            db_rss.rights = rss_obj.get('feed', {}).get("rights", db_rss.rights)
+            db_rss.last_build_date = rss_obj.get('feed', {}).get("updated", db_rss.last_build_date)
+            db_rss.web_master = rss_obj.get('feed', {}).get("publisher", db_rss.web_master)
+
+            # try:
+            #     db_rss.title = rss_obj['feed'].title
+            # except:
+            #     pass
+            # try:
+            #     db_rss.description = rss_obj['feed'].description
+            # except:
+            #     pass
+            # try:
+            #     db_rss.language = rss_obj['feed'].language
+            # except:
+            #     pass
+            # try:
+            #     db_rss.rights = rss_obj['feed'].rights
+            # except:
+            #     pass
+            # try:
+            #     db_rss.last_build_date = rss_obj['feed'].updated
+            # except:
+            #     pass
+            # try:
+            #     db_rss.web_master = rss_obj['feed'].publisher
+            # except:
+            #     pass
             crud.update_rss_obj(db, db_rss)
 
             for item in rss_obj.entries:
@@ -100,46 +107,49 @@ def crawling(rss_id: int, url: str):
                     continue
 
                 try:
-                    description = html.unescape(item.summary)
-                except:
-                    description = ""
 
-                try:
-                    author = item.author
-                except:
-                    author = ""
-                try:
-                    category = item.category
-                except:
-                    category = ""
-                try:
-                    pub_date = item.published
-                except:
-                    pub_date = datetime.datetime.utcnow().isoformat()
-
-                try:
                     rss_item = schemas.ItemRssItemCreateNewscj(
                         title=item.title,
                         link=item.link,
-                        description=description,
+                        description="",
                         guid=item.link,
-                        pub_date=pub_date,
-                        author=author,
-                        category=category,
+                        pub_date=datetime.datetime.utcnow().isoformat(),
+                        author="",
+                        category="",
                     )
+
+                    try:
+                        rss_item.description = html.unescape(item.summary)
+                    except Exception as e:
+                        logging.warning(f"[{rss_id}]({url:<55}): description error: {e}")
+                    try:
+                        rss_item.author = item.author
+                    except Exception as e:
+                        logging.warning(f"[{rss_id}]({url:<55}): author error: {e}")
+                    try:
+                        rss_item.category = item.category
+                    except Exception as e:
+                        logging.warning(f"[{rss_id}]({url:<55}): category error: {e}")
+                    try:
+                        rss_item.pub_date = item.published
+                    except Exception as e:
+                        logging.warning(f"[{rss_id}]({url:<55}): category error: {e}")
+
                     crud.create_rss_item(db, rss_id, rss_item)
                     add_count += 1
                 except Exception as e:
-                    print(e)
+                    logging.error(f"[{rss_id}]({url:<55}): rss_item error: {e}")
 
             if add_count == 0:
                 if len(rss_obj.entries):
                     try:
                         rss_item_time: struct_time = rss_obj.entries[0].published_parsed
+
                         if (datetime.datetime.utcnow().year - rss_item_time.tm_year) > 1:
-                            logging.info(f"[{rss_id}]({url}): Not Update, Remove job")
+                            logging.info(f"[{rss_id}]({url:<55}): Not Update, Remove job")
                             crud.update_rss_active(db, rss_id, False)
                             scheduler.remove_job(f"{rss_id}")
+
                         else:
                             scheduler.reschedule_job(f"{rss_id}", trigger='interval',
                                                      seconds=3600 + random.randint(0, 600))
@@ -149,34 +159,33 @@ def crawling(rss_id: int, url: str):
                     scheduler.reschedule_job(f"{rss_id}", trigger='interval', seconds=3600 + random.randint(0, 600))
 
             elif add_count / len(rss_obj.entries) > 0.5:
-                logging.info(f"[{rss_id}]({url}): Add {add_count} items")
+                logging.info(f"[{rss_id}]({url:<55}): Add {add_count} items")
                 scheduler.reschedule_job(f"{rss_id}", trigger='interval', seconds=random.randint(600, 1200))
 
             else:
-                logging.info(f"[{rss_id}]({url}): Add {add_count} items")
-                scheduler.reschedule_job(f"{rss_id}", trigger='interval', seconds=random.randint(1200, 1200))
+                logging.info(f"[{rss_id}]({url:<55}): Add {add_count} items")
+                scheduler.reschedule_job(f"{rss_id}", trigger='interval', seconds=random.randint(1200, 1800))
 
         except requests.exceptions.HTTPError as http_error:
             response: requests.Response = http_error.response
-            logging.warning(f"[{rss_id}]({url}): {http_error}")
+            logging.warning(f"[{rss_id}]({url:<55}): {http_error}")
             text = crawling_news_server.crawl.response_to_text.response_to_text(url, response)
             crud.create_rss_response_record(db, rss_id, url, text, response.status_code)
             scheduler.reschedule_job(f"{rss_id}", trigger='interval', seconds=3600 + random.randint(0, 120))
 
             if not crud.get_rss(db, rss_id).is_active:
-                logging.info(f"[{rss_id}]({url}): Remove job")
+                logging.info(f"[{rss_id}]({url:<55}): Remove job")
                 scheduler.remove_job(f"{rss_id}")
 
         except requests.exceptions.ConnectionError:
-            logging.info(f"[{rss_id}]({url}): Remove job")
+            logging.info(f"[{rss_id}]({url:<55}): Remove job")
             crud.update_rss_active(db, rss_id, False)
             scheduler.remove_job(f"{rss_id}")
-            pass
 
         except Exception as e:
-            logging.warning(f"[{rss_id}]({url}): {e}")
+            logging.warning(f"[{rss_id}]({url:<55}): {e}")
             if not crud.get_rss(db, rss_id).is_active:
-                logging.info(f"[{rss_id}]({url}): Remove job")
+                logging.info(f"[{rss_id}]({url:<55}): Remove job")
                 scheduler.remove_job(f"{rss_id}")
             pass
 
