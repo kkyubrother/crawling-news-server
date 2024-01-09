@@ -60,13 +60,6 @@ class ItemRssItemCreate(ItemRssItem):
     pass
 
 
-class ItemRssItemCreateNewscj(ItemRssItemCreate):
-    guid: str
-    pub_date: str
-    author: str
-    pass
-
-
 class ItemRssItemResponse(ItemRssItem):
     id: int
     rss_id: int

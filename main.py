@@ -60,6 +60,7 @@ def crawling(rss_id: int, url: str):
             if not crud.get_rss(db, rss_id).is_active:
                 logging.info(f"[{rss_id:<10}]({url:<55}): Remove job")
                 scheduler.remove_job(f"{rss_id}")
+                return
 
         except Exception as e:
             logging.error(f"[{rss_id:<10}]({url:<55}): Remove job Error {e}")
@@ -89,33 +90,35 @@ def crawling(rss_id: int, url: str):
                     continue
 
                 try:
-
-                    rss_item = schemas.ItemRssItemCreateNewscj(
+                    rss_item = schemas.ItemRssItemCreate(
                         title=item.title,
                         link=item.link,
                         description="",
                         guid=item.link,
                         pub_date=datetime.datetime.utcnow().isoformat(),
-                        author="",
-                        category="",
                     )
 
                     try:
                         rss_item.description = html.unescape(item.summary)
                     except Exception as e:
-                        logging.warning(f"[{rss_id:<10}]({url:<55}): description error: {e}")
-                    try:
-                        rss_item.author = item.author
-                    except Exception as e:
-                        logging.warning(f"[{rss_id:<10}]({url:<55}): author error: {e}")
-                    try:
-                        rss_item.category = item.category
-                    except Exception as e:
-                        logging.warning(f"[{rss_id:<10}]({url:<55}): category error: {e}")
-                    try:
-                        rss_item.pub_date = item.published
-                    except Exception as e:
-                        logging.warning(f"[{rss_id:<10}]({url:<55}): pub_date error: {e}")
+                        logging.warning(f"[{rss_id:<10}]({url:<55}): description not exist: {e}")
+
+                    rss_item.author = item.get("author", None)
+                    rss_item.category = item.get("category", None)
+                    rss_item.pub_date = item.get("published", None)
+
+                    # try:
+                    #     rss_item.author = item.author
+                    # except Exception as e:
+                    #     logging.debug(f"[{rss_id:<10}]({url:<55}): author not exist: {e}")
+                    # try:
+                    #     rss_item.category = item.category
+                    # except Exception as e:
+                    #     logging.debug(f"[{rss_id:<10}]({url:<55}): category not exist: {e}")
+                    # try:
+                    #     rss_item.pub_date = item.published
+                    # except Exception as e:
+                    #     logging.debug(f"[{rss_id:<10}]({url:<55}): pub_date not exist: {e}")
 
                     crud.create_rss_item(db, rss_id, rss_item)
                     add_count += 1
