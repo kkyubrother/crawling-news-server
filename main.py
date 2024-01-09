@@ -57,6 +57,14 @@ def crawling(rss_id: int, url: str):
     add_count = 0
     with get_context_db() as db:
         try:
+            if not crud.get_rss(db, rss_id).is_active:
+                logging.info(f"[{rss_id}]({url:<55}): Remove job")
+                scheduler.remove_job(f"{rss_id}")
+
+        except Exception as e:
+            logging.error(f"[{rss_id}]({url:<55}): Remove job Error {e}")
+
+        try:
             response = requests.get(url, headers=crawling_news_server.crawl.util.get_header(), verify=False)
             response.raise_for_status()
 
