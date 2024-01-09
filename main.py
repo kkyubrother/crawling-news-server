@@ -70,8 +70,6 @@ def crawling(rss_id: int, url: str):
 
             text = crawling_news_server.crawl.response_to_text.response_to_text(url, response)
 
-            crud.create_rss_response_record(db, rss_id, url, text, response.status_code)
-
             rss_obj = rss_fixer.fix_rss(url, response.text)
 
             db_rss = crud.get_rss(db, rss_id)
@@ -130,6 +128,7 @@ def crawling(rss_id: int, url: str):
                         rss_item_time: struct_time = rss_obj.entries[0].published_parsed
 
                         if (datetime.datetime.utcnow().year - rss_item_time.tm_year) > 1:
+                            crud.create_rss_response_record(db, rss_id, url, text, response.status_code)
                             logging.info(f"[{rss_id:<10}]({url:<55}): Not Update, Remove job")
                             crud.update_rss_active(db, rss_id, False)
                             scheduler.remove_job(f"{rss_id}")
@@ -139,14 +138,18 @@ def crawling(rss_id: int, url: str):
                                                      seconds=3600 + random.randint(0, 600))
                     except:
                         scheduler.reschedule_job(f"{rss_id}", trigger='interval', seconds=3600 + random.randint(0, 600))
+
                 else:
-                    scheduler.reschedule_job(f"{rss_id}", trigger='interval', seconds=3600 + random.randint(0, 600))
+                    crud.create_rss_response_record(db, rss_id, url, "<!-- ENTRY ZERO -->" + text, response.status_code)
+                    scheduler.reschedule_job(f"{rss_id}", trigger='interval', seconds=7200 + random.randint(0, 600))
 
             elif add_count / len(rss_obj.entries) > 0.5:
+                crud.create_rss_response_record(db, rss_id, url, text, response.status_code)
                 logging.info(f"[{rss_id:<10}]({url:<55}): Add {add_count} items")
                 scheduler.reschedule_job(f"{rss_id}", trigger='interval', seconds=random.randint(600, 1200))
 
             else:
+                crud.create_rss_response_record(db, rss_id, url, text, response.status_code)
                 logging.info(f"[{rss_id:<10}]({url:<55}): Add {add_count} items")
                 scheduler.reschedule_job(f"{rss_id}", trigger='interval', seconds=random.randint(1200, 1800))
 
