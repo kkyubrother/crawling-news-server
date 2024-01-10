@@ -47,7 +47,15 @@ job_defaults = {
 
 scheduler = BackgroundScheduler(jobstores=jobstores, executors=executors, job_defaults=job_defaults, timezone=utc)
 app = FastAPI(
-    version="0.1.1"
+    version="0.1.1",
+    title="뉴스 수집 및 검색",
+    summary="""# 목적
+    개인을 위한 뉴스 수집과 검색 서비스
+    
+    # 버전
+    ## [2024-01-08] v0.1.1 rss 기본 api 추가
+    ## [2024-01-02] v0.1.0 기초 완성
+    """
 )
 
 
