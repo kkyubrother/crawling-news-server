@@ -11,10 +11,12 @@ def response_to_text(url: str, response: requests.Response) -> str:
             or parsed_url.netloc == 'www.popco.net'
             or parsed_url.netloc == 'www.bseconomy.com'
             or parsed_url.netloc == 'www.joseilbo.com'
-            # or parsed_url.netloc == 'sport.chosun.com'
             or parsed_url.netloc == 'www.withleisure.co.kr'
     ):
         response.encoding = 'euc-kr'
+        text = response.text
+    elif parsed_url.netloc == 'sport.chosun.com':
+        response.encoding = 'utf-8'
         text = response.text
     # elif parsed_url.netloc == 'rss.edaily.co.kr':
     elif response.content.startswith(b'\xef\xbb\xbf'):
