@@ -45,7 +45,7 @@ def add_job_rss_crawling(db_rss: Type[models.RSS]):
         delay = random.randint(200, 400)
 
     url = db_rss.url
-    next_run_time = (datetime.datetime.utcnow() + datetime.timedelta(seconds=(random.randint(0, 120) + 60)))
+    next_run_time = (datetime.datetime.utcnow() + datetime.timedelta(seconds=(random.randint(0, 600) + 60)))
 
     scheduler.add_job(
         crawling,

@@ -54,11 +54,8 @@ def init_data():
         for db_rss in db_rss_all:
             if not db_rss.is_active:
                 continue
-            try:
-                # 기존 JOB이 있다면 유지
-                scheduler.get_job(f"{db_rss.id}")
-            except:
-                # 없으면 추가
+
+            if not scheduler.get_job(f"{db_rss.id}"):
                 add_job_rss_crawling(db_rss)
 
         scheduler.start()
