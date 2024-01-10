@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import html
+import logging
+import datetime
 from typing import List, Type, Union, Dict
 
 from sqlalchemy.orm import Session
@@ -7,6 +10,9 @@ from sqlalchemy import and_, or_
 
 from . import models, schemas
 from .models import RSS, RSSItem
+
+
+logger = logging.getLogger(__name__)
 
 
 def get_rss(db: Session, rss_id: int) -> models.RSS | None:
@@ -55,7 +61,7 @@ def update_rss_obj(db: Session, db_rss: models.RSS) -> models.RSS | None:
     return db_rss
 
 
-def update_rss_from_rss_dict(db: Session, rss_id: int, feed: dict[str, str | None]) -> None:
+def update_rss_from_rss_dict(db: Session, rss_id: int, feed: Dict[str, str | None]) -> None:
     db_rss = get_rss(db, rss_id)
 
     db_rss.title = feed.get("title", db_rss.title)
@@ -91,6 +97,33 @@ def create_rss_item(db: Session, rss_id: int, rss_item: schemas.ItemRssItemCreat
     db.commit()
     db.refresh(db_rss_item)
     return db_rss_item
+
+
+def create_rss_item_from_rss_item_obj(db: Session, rss_id: int, rss_item_obj: dict[str, str]) -> bool:
+    try:
+        rss_item = schemas.ItemRssItemCreate(
+            title=rss_item_obj.get("title", ""),
+            link=rss_item_obj.get("link", ""),
+            description="",
+            guid=rss_item_obj.get("link", ""),
+            pub_date=datetime.datetime.utcnow().isoformat(),
+        )
+
+        try:
+            rss_item.description = html.unescape(rss_item_obj.get("summary", ""))
+        except Exception as e:
+            logging.warning(f"[{rss_id:<10}]: description error: {e}")
+
+        rss_item.description = html.unescape(rss_item_obj.get("summary", ""))
+        rss_item.author = rss_item_obj.get("author", None)
+        rss_item.category = rss_item_obj.get("category", None)
+        rss_item.pub_date = rss_item_obj.get("published", None)
+        create_rss_item(db, rss_id, rss_item)
+
+        return True
+    except Exception as e:
+        logger.error(f"[{rss_id:<10}]: rss_item error: {e}")
+    return False
 
 
 def create_rss_response_record(db: Session, rss_id: int, link: str, body: str, status_code: int = 200):
@@ -195,3 +228,6 @@ def get_all_rss_search(db: Session, q: str, page_number: int, page_limit: int) -
         "total_count": length,
         "data": query.all()
     }
+
+
+

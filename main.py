@@ -21,7 +21,6 @@ from apscheduler.executors.pool import ThreadPoolExecutor, ProcessPoolExecutor
 
 import requests
 import urllib3
-import html
 
 from crawling_news_server.crawl import rss_fixer
 
@@ -30,6 +29,9 @@ logging.basicConfig(level=logging.INFO)
 logging.getLogger('apscheduler').setLevel(logging.WARNING)
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 
 jobstores = {}
@@ -59,6 +61,10 @@ app = FastAPI(
 )
 
 
+def reschedule(rss_id: int, base_seconds: int):
+    scheduler.reschedule_job(f"{rss_id}", trigger='interval', seconds=base_seconds + random.randint(0, 600))
+
+
 def crawling(rss_id: int, url: str):
     logging.info(f"[{rss_id:<10}]({url:<55}): Crawling...")
 
@@ -79,37 +85,16 @@ def crawling(rss_id: int, url: str):
             response.raise_for_status()
 
             text = crawling_news_server.crawl.response_to_text.response_to_text(url, response)
-
             rss_obj = rss_fixer.fix_rss(url, response.text)
 
             crud.update_rss_from_rss_dict(db, rss_id, rss_obj.get("feed", {}))
 
             for item in rss_obj.entries:
-                db_rss_item = crud.get_rss_item_by_rss_id_and_link(db, rss_id, item.link)
-                if db_rss_item is not None:
+                if crud.get_rss_item_by_rss_id_and_link(db, rss_id, item.link) is not None:
                     continue
 
-                try:
-                    rss_item = schemas.ItemRssItemCreate(
-                        title=item.title,
-                        link=item.link,
-                        description="",
-                        guid=item.link,
-                        pub_date=datetime.datetime.utcnow().isoformat(),
-                    )
-
-                    try:
-                        rss_item.description = html.unescape(item.summary)
-                    except Exception as e:
-                        logging.warning(f"[{rss_id:<10}]({url:<55}): description not exist: {e}")
-
-                    rss_item.author = item.get("author", None)
-                    rss_item.category = item.get("category", None)
-                    rss_item.pub_date = item.get("published", None)
-                    crud.create_rss_item(db, rss_id, rss_item)
+                if crud.create_rss_item_from_rss_item_obj(db, rss_id, item):
                     add_count += 1
-                except Exception as e:
-                    logging.error(f"[{rss_id:<10}]({url:<55}): rss_item error: {e}")
 
             if add_count == 0:
                 if len(rss_obj.entries):
@@ -118,50 +103,50 @@ def crawling(rss_id: int, url: str):
 
                         if (datetime.datetime.utcnow().year - rss_item_time.tm_year) > 1:
                             crud.create_rss_response_record(db, rss_id, url, text, response.status_code)
-                            logging.info(f"[{rss_id:<10}]({url:<55}): Not Update, Remove job")
+                            logger.info(f"[{rss_id:<10}]({url:<55}): Not Update, Remove job")
                             crud.update_rss_active(db, rss_id, False)
                             scheduler.remove_job(f"{rss_id}")
 
                         else:
-                            scheduler.reschedule_job(f"{rss_id}", trigger='interval',
-                                                     seconds=3600 + random.randint(0, 600))
+                            reschedule(rss_id, 3600)
+
                     except:
-                        scheduler.reschedule_job(f"{rss_id}", trigger='interval', seconds=3600 + random.randint(0, 600))
+                        reschedule(rss_id, 3600)
 
                 else:
                     crud.create_rss_response_record(db, rss_id, url, "<!-- ENTRY ZERO -->" + text, response.status_code)
-                    scheduler.reschedule_job(f"{rss_id}", trigger='interval', seconds=7200 + random.randint(0, 600))
+                    reschedule(rss_id, 7200)
 
             elif add_count / len(rss_obj.entries) > 0.5:
                 crud.create_rss_response_record(db, rss_id, url, text, response.status_code)
-                logging.info(f"[{rss_id:<10}]({url:<55}): Add {add_count} items")
-                scheduler.reschedule_job(f"{rss_id}", trigger='interval', seconds=random.randint(600, 1200))
+                logger.info(f"[{rss_id:<10}]({url:<55}): Add {add_count} items")
+                reschedule(rss_id, 600)
 
             else:
                 crud.create_rss_response_record(db, rss_id, url, text, response.status_code)
-                logging.info(f"[{rss_id:<10}]({url:<55}): Add {add_count} items")
-                scheduler.reschedule_job(f"{rss_id}", trigger='interval', seconds=random.randint(1200, 1800))
+                logger.info(f"[{rss_id:<10}]({url:<55}): Add {add_count} items")
+                reschedule(rss_id, 1200)
 
         except requests.exceptions.HTTPError as http_error:
             response: requests.Response = http_error.response
-            logging.warning(f"[{rss_id:<10}]({url:<55}): {http_error}")
+            logger.warning(f"[{rss_id:<10}]({url:<55}): {http_error}")
             text = crawling_news_server.crawl.response_to_text.response_to_text(url, response)
             crud.create_rss_response_record(db, rss_id, url, text, response.status_code)
-            scheduler.reschedule_job(f"{rss_id}", trigger='interval', seconds=3600 + random.randint(0, 120))
+            reschedule(rss_id, 3600)
 
             if not crud.get_rss(db, rss_id).is_active:
-                logging.info(f"[{rss_id:<10}]({url:<55}): Remove job")
+                logger.info(f"[{rss_id:<10}]({url:<55}): Remove job")
                 scheduler.remove_job(f"{rss_id}")
 
         except requests.exceptions.ConnectionError:
-            logging.info(f"[{rss_id:<10}]({url:<55}): Connection Error, Remove job")
+            logger.info(f"[{rss_id:<10}]({url:<55}): Connection Error, Remove job")
             crud.update_rss_active(db, rss_id, False)
             scheduler.remove_job(f"{rss_id}")
 
         except Exception as e:
-            logging.warning(f"[{rss_id:<10}]({url:<55}): {e}")
+            logger.warning(f"[{rss_id:<10}]({url:<55}): {e}")
             if not crud.get_rss(db, rss_id).is_active:
-                logging.info(f"[{rss_id:<10}]({url:<55}): Remove job")
+                logger.info(f"[{rss_id:<10}]({url:<55}): Remove job")
                 scheduler.remove_job(f"{rss_id}")
             pass
 
@@ -209,7 +194,15 @@ def init_data():
 
 
 @app.get('/rss', response_model=List[schemas.ItemRSSResponse])
-async def read_rss(q: Optional[str] = None, offset: int = 1, limit: int = 50,db: Session = Depends(get_db)):
+async def read_rss(q: Optional[str] = None, offset: int = 1, limit: int = 50, db: Session = Depends(get_db)):
+    """
+
+    :param q: title과 description에서 해당 텍스트를 검색한다.
+    :param offset: 페이지 번호
+    :param limit: 1회 요청 페이지  갯수
+    :param db: DB 세션
+    :return: RSS 객체
+    """
     if q:
         return crud.get_all_rss_search(db, q, offset, limit)["data"]
 
@@ -220,7 +213,6 @@ async def read_rss(q: Optional[str] = None, offset: int = 1, limit: int = 50,db:
 @app.get("/rss/item")
 async def read_rss_item(q: str, offset: int = 1, limit: int = 50, db: Session = Depends(get_db)):
     return crud.find_rss_title(db, q, offset, limit)
-    pass
 
 
 @app.get('/rss/job')
