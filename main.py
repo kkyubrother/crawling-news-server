@@ -5,6 +5,7 @@ import logging
 
 from fastapi import FastAPI, Depends, HTTPException, Body, Query
 from sqlalchemy.orm import Session
+from fastapi.middleware.cors import CORSMiddleware
 
 from crawling_news_server import crud, models, schemas
 from crawling_news_server.database import get_db, Base, engine, get_context_db
@@ -21,6 +22,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
+
 app = FastAPI(
     version="0.1.1",
     title="뉴스 수집 및 검색",
@@ -41,6 +43,13 @@ app = FastAPI(
 </details>
 
 """
+)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=os.environ.get("ALLOW_ORIGINS", "*").split(";"),
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
