@@ -11,7 +11,7 @@ def response_to_text(url: str, response: requests.Response) -> str:
             or parsed_url.netloc == 'www.popco.net'
             or parsed_url.netloc == 'www.bseconomy.com'
             or parsed_url.netloc == 'www.joseilbo.com'
-            or parsed_url.netloc == 'sport.chosun.com'
+            # or parsed_url.netloc == 'sport.chosun.com'
             or parsed_url.netloc == 'www.withleisure.co.kr'
     ):
         response.encoding = 'euc-kr'
