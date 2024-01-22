@@ -1,9 +1,9 @@
-from typing import Optional
+from typing import Optional, List, Any
 import datetime
 from pydantic import BaseModel, Field
 
 
-class ItemRSS(BaseModel):
+class RssDto(BaseModel):
     name: str
     url: str
     title: str
@@ -14,11 +14,11 @@ class ItemRSS(BaseModel):
     pass
 
 
-class ItemRSSCreate(ItemRSS):
+class RssCreateDto(RssDto):
     pass
 
 
-class ItemRSSResponse(ItemRSS):
+class RssResponseDto(RssDto):
     id: int
     is_active: int
 
@@ -40,7 +40,7 @@ class ItemRSSResponse(ItemRSS):
     extra: Optional[str] = Field(default=None)
 
 
-class ItemRssItem(BaseModel):
+class RssItemDto(BaseModel):
     title: str
     description: str
     link: str
@@ -56,11 +56,11 @@ class ItemRssItem(BaseModel):
     extra: Optional[str] = Field(default=None)
 
 
-class ItemRssItemCreate(ItemRssItem):
+class RssItemCreateDto(RssItemDto):
     pass
 
 
-class ItemRssItemResponse(ItemRssItem):
+class RssItemResponseDto(RssItemDto):
     id: int
     rss_id: int
     pass
@@ -73,3 +73,20 @@ class ResponseRecordDto(BaseModel):
     body: str
     created_at: datetime.datetime
     rss_id: int
+
+
+class PaginationResponse(BaseModel):
+    total_count: int
+    data: List[Any]
+
+
+class RssItemListResponse(PaginationResponse):
+    data: List[RssItemDto]
+
+
+class RssResponse(PaginationResponse):
+    data: List[RssResponseDto]
+
+
+class RssRecordResponse(PaginationResponse):
+    data: List[ResponseRecordDto]

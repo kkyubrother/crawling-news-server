@@ -27,7 +27,7 @@ def get_rss_by_url(db: Session, url: str) -> models.RSS | None:
     return db.query(models.RSS).filter(models.RSS.url == url).first()
 
 
-def create_rss(db: Session, rss: schemas.ItemRSSCreate):
+def create_rss(db: Session, rss: schemas.RssCreateDto):
     db_rss = models.RSS(
         name=rss.name,
         url=rss.url,
@@ -78,7 +78,7 @@ def get_rss_item_by_rss_id_and_link(db: Session, rss_id: int, link: str) -> mode
     return db.query(models.RSSItem).filter(models.RSSItem.rss_id == rss_id, models.RSSItem.link == link).first()
 
 
-def create_rss_item(db: Session, rss_id: int, rss_item: schemas.ItemRssItemCreate):
+def create_rss_item(db: Session, rss_id: int, rss_item: schemas.RssItemCreateDto):
     db_rss_item = models.RSSItem(
         rss_id=rss_id,
         title=rss_item.title,
@@ -101,7 +101,7 @@ def create_rss_item(db: Session, rss_id: int, rss_item: schemas.ItemRssItemCreat
 
 def create_rss_item_from_rss_item_obj(db: Session, rss_id: int, rss_item_obj: dict[str, str]) -> bool:
     try:
-        rss_item = schemas.ItemRssItemCreate(
+        rss_item = schemas.RssItemCreateDto(
             title=rss_item_obj.get("title", ""),
             link=rss_item_obj.get("link", ""),
             description="",
@@ -230,4 +230,5 @@ def get_all_rss_search(db: Session, q: str, page_number: int, page_limit: int) -
     }
 
 
-
+def get_rss_item_by_id(db: Session, rss_item_id: int) -> Type[RSSItem]:
+    return db.query(models.RSSItem).filter_by(id=rss_item_id).one()

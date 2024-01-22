@@ -70,7 +70,7 @@ def init_data():
         scheduler.start()
 
 
-@app.get('/rss', response_model=List[schemas.ItemRSSResponse])
+@app.get('/rss', response_model=schemas.RssResponse)
 async def read_rss(q: Optional[str] = None, offset: int = 1, limit: int = 50, db: Session = Depends(get_db)):
     """
 
@@ -81,13 +81,13 @@ async def read_rss(q: Optional[str] = None, offset: int = 1, limit: int = 50, db
     :return: RSS 객체
     """
     if q:
-        return crud.get_all_rss_search(db, q, offset, limit)["data"]
+        return crud.get_all_rss_search(db, q, offset, limit)
 
     else:
-        return crud.get_all_rss(db, offset, limit)["data"]
+        return crud.get_all_rss(db, offset, limit)
 
 
-@app.get("/rss/item", response_model=List[schemas.ItemRssItemResponse])
+@app.get("/rss/item", response_model=schemas.RssItemListResponse)
 async def read_rss_item(q: str, offset: int = 1, limit: int = 50, db: Session = Depends(get_db)):
     return crud.find_rss_title(db, q, offset, limit)
 
@@ -97,12 +97,12 @@ async def read_rss_job(db: Session = Depends(get_db)):
     pass
 
 
-@app.get('/rss/responses', response_model=List[schemas.ResponseRecordDto])
+@app.get('/rss/responses', response_model=schemas.RssRecordResponse)
 async def read_rss(offset: int = 1, limit: int = 50, db: Session = Depends(get_db)):
-    return crud.get_all_rss_responses(db, offset, limit)['data']
+    return crud.get_all_rss_responses(db, offset, limit)
 
 
-@app.get("/rss/{rss_id}", response_model=schemas.ItemRSSResponse)
+@app.get("/rss/{rss_id}", response_model=schemas.RssResponseDto)
 async def read_user(rss_id: int, db: Session = Depends(get_db)):
     db_rss = crud.get_rss(db, rss_id)
     if db_rss is None:
@@ -110,7 +110,7 @@ async def read_user(rss_id: int, db: Session = Depends(get_db)):
     return db_rss
 
 
-@app.get("/rss/{rss_id}/items", response_model=List[schemas.ItemRssItemResponse])
+@app.get("/rss/{rss_id}/items", response_model=List[schemas.RssItemResponseDto])
 async def read_rss_item_by_rss_id(rss_id: int, offset: int = 1, limit: int = 50, db: Session = Depends(get_db)):
     return crud.get_rss_items(db, rss_id, offset, limit)['data']
 
@@ -120,9 +120,9 @@ async def read_rss_item_by_rss_id(rss_id: int, offset: int = 1, limit: int = 50,
     return crud.get_rss_responses(db, rss_id, offset, limit)['data']
 
 
-@app.post("/rss", response_model=schemas.ItemRSS)
+@app.post("/rss", response_model=schemas.RssDto)
 async def create_rss(rss: Annotated[
-    schemas.ItemRSSCreate,
+    schemas.RssCreateDto,
     Body(openapi_examples={
         "newscj": {
             "summary": "조선일보 기본 데이터",
