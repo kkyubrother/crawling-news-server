@@ -82,7 +82,7 @@ class PaginationResponse(BaseModel):
 
 
 class RssItemListResponse(PaginationResponse):
-    data: List[RssItemDto]
+    data: List[RssItemResponseDto]
 
 
 class RssResponse(PaginationResponse):
