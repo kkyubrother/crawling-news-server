@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 app = FastAPI(
-    version="0.1.1",
+    version="0.1.2",
     title="뉴스 수집 및 검색",
     summary="개인용 뉴스 수집 및 검색 서비스 제공",
     description="""# 목적
@@ -32,10 +32,16 @@ app = FastAPI(
 
 # 버전
 <details>
+<summary>[2024-01-24] v0.1.2</summary>
+
+* RssItem에 Rss 정보 포함
+</details>
+<details>
 <summary>[2024-01-08] v0.1.1</summary>
 
 * rss 기본 api 추가
 </details>
+
 <details>
 <summary>[2024-01-02] v0.1.0</summary>
 

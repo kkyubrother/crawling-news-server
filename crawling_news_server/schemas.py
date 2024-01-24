@@ -63,6 +63,7 @@ class RssItemCreateDto(RssItemDto):
 class RssItemResponseDto(RssItemDto):
     id: int
     rss_id: int
+    rss: RssResponseDto
     pass
 
 
