@@ -6,7 +6,7 @@ import datetime
 from typing import List, Type, Union, Dict
 
 from sqlalchemy.orm import Session
-from sqlalchemy import and_, or_
+from sqlalchemy import and_, or_, text
 
 from . import models, schemas
 from .models import RSS, RSSItem
@@ -140,7 +140,7 @@ def create_rss_response_record(db: Session, rss_id: int, link: str, body: str, s
     return db_response_record
 
 
-def find_rss_title(db: Session, title: str, page_number: int, page_limit: int) -> dict[str, Union[int, list[Type[models.RSSItem]]]]:
+def find_rss_item_by_title(db: Session, title: str, page_number: int, page_limit: int, distinct: bool) -> dict[str, Union[int, list[Type[models.RSSItem]]]]:
     """
     https://gist.github.com/jas-haria/a993d4ef213b3c0dd1500f86d31ad749
     https://stackoverflow.com/questions/4186062/sqlalchemy-order-by-descending
@@ -149,6 +149,12 @@ def find_rss_title(db: Session, title: str, page_number: int, page_limit: int) -
     query = db.query(models.RSSItem).filter(
         and_(*[models.RSSItem.title.like(f"%{word}%") for word in title.split()])
     ).order_by(models.RSSItem.id.desc())
+
+    query = db.query(models.RSSItem).filter(text("MATCH(title) AGAINST (:search_query IN BOOLEAN MODE)")).params(search_query=' '.join(title.split()))
+
+    if distinct:
+        query = query.group_by(models.RSSItem.link)
+
     length = query.count()
     if page_number > 0:
         query = query.offset((page_number - 1) * page_limit)
@@ -232,3 +238,16 @@ def get_all_rss_search(db: Session, q: str, page_number: int, page_limit: int) -
 
 def get_rss_item_by_id(db: Session, rss_item_id: int) -> Type[RSSItem]:
     return db.query(models.RSSItem).filter_by(id=rss_item_id).one()
+
+
+def read_all_rss_items(db: Session, page_number: int, page_limit: int) -> dict[str, list[Type[RSSItem]] | int]:
+    query = (db.query(models.RSSItem)
+             .order_by(models.RSSItem.id.desc()))
+    length = query.count()
+    if page_number > 0:
+        query = query.offset((page_number - 1) * page_limit)
+    query = query.limit(page_limit)
+    return {
+        "total_count": length,
+        "data": query.all()
+    }

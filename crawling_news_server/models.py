@@ -3,11 +3,12 @@ from typing import List, Optional
 from datetime import datetime
 
 from sqlalchemy.sql import func
-from sqlalchemy import ForeignKey, String, Text, DateTime
+from sqlalchemy import ForeignKey, String, Text, DateTime, text, Engine
 from sqlalchemy.orm import Mapped
 from sqlalchemy.orm import mapped_column
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.mysql.types import LONGTEXT
+from sqlalchemy.inspection import inspect
 
 from .database import Base
 
@@ -42,6 +43,12 @@ class RSS(Base):
     web_master: Mapped[Optional[str]] = mapped_column(String(128))
 
     extra: Mapped[Optional[str]] = mapped_column(Text)
+
+    publish_date: Mapped[str] = mapped_column(String(11), default="", server_default="")
+    publish_time: Mapped[str] = mapped_column(String(22), default="", server_default="")
+    publish_datetime: Mapped[Optional[datetime]] = mapped_column(DateTime, default=func.now(), server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now(), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now(), server_default=func.now())
 
     image: Mapped["RSSImage"] = relationship("RSSImage", back_populates="rss")
     items: Mapped[List["RSSItem"]] = relationship()
@@ -81,8 +88,23 @@ class RSSItem(Base):
 
     extra: Mapped[Optional[str]] = mapped_column(Text)
 
+    publish_date: Mapped[str] = mapped_column(String(11), default="", server_default="")
+    publish_time: Mapped[str] = mapped_column(String(22), default="", server_default="")
+    publish_datetime: Mapped[Optional[datetime]] = mapped_column(DateTime, default=func.now(), server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now(), server_default=func.now())
+
     rss_id: Mapped[int] = mapped_column(ForeignKey("rss.id"))
     rss = relationship("RSS", back_populates="items")
+
+    @classmethod
+    def create_fulltext_index(cls, engine: Engine):
+        index_name = 'title_fulltext_index'
+        inspector = inspect(engine)
+        with engine.connect() as conn:
+            # if not engine.dialect.has_index(conn, index_name, cls.__tablename__):
+            if not any(index['name'] == index_name for index in inspector.get_indexes(cls.__tablename__)):
+                index_query = text(f'CREATE FULLTEXT INDEX {index_name} ON {cls.__tablename__} (title)')
+                conn.execute(index_query)
 
 
 class ResponseEncoding(Base):

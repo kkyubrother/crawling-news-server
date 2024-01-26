@@ -7,7 +7,7 @@ from fastapi import FastAPI, Depends, HTTPException, Body, Query
 from sqlalchemy.orm import Session
 from fastapi.middleware.cors import CORSMiddleware
 
-from crawling_news_server import crud, models, schemas
+from crawling_news_server import crud, models, schemas, __version__, __description__
 from crawling_news_server.database import get_db, Base, engine, get_context_db
 
 import urllib3
@@ -24,31 +24,10 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 app = FastAPI(
-    version="0.1.2",
+    version=__version__,
     title="뉴스 수집 및 검색",
     summary="개인용 뉴스 수집 및 검색 서비스 제공",
-    description="""# 목적
-개인을 위한 뉴스 수집과 검색 서비스
-
-# 버전
-<details>
-<summary>[2024-01-24] v0.1.2</summary>
-
-* RssItem에 Rss 정보 포함
-</details>
-<details>
-<summary>[2024-01-08] v0.1.1</summary>
-
-* rss 기본 api 추가
-</details>
-
-<details>
-<summary>[2024-01-02] v0.1.0</summary>
-
-* 기초 완성
-</details>
-
-"""
+    description=__description__
 )
 app.add_middleware(
     CORSMiddleware,
@@ -60,8 +39,9 @@ app.add_middleware(
 
 
 @app.on_event('startup')
-def init_data():
+async def init_data():
     Base.metadata.create_all(engine)
+    models.RSSItem.create_fulltext_index(engine)
     db = get_db().__next__()
 
     db_rss_all = crud.get_rss_all(db)
@@ -94,8 +74,8 @@ async def read_rss(q: Optional[str] = None, offset: int = 1, limit: int = 50, db
 
 
 @app.get("/rss/item", response_model=schemas.RssItemListResponse)
-async def read_rss_item(q: str, offset: int = 1, limit: int = 50, db: Session = Depends(get_db)):
-    return crud.find_rss_title(db, q, offset, limit)
+async def read_rss_item(q: str, offset: int = 1, limit: int = 50, distinct: bool = True, db: Session = Depends(get_db)):
+    return crud.find_rss_item_by_title(db, q, offset, limit, distinct)
 
 
 @app.get('/rss/job')

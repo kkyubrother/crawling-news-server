@@ -15,6 +15,11 @@ alembic revision --autogenerate
 alembic upgrade head
 ```
 
+# Todo
+* [x] schema 수정
+* [x] 검색 속도 개선
+
+
 ### 주의사항
 * SQLite는 제약조건 변경을 지원하지 않는다.
 * 오류 발생시 downgrade 후 직접 파일을 삭제하고 다시 생성할 것
