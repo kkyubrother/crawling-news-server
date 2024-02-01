@@ -166,14 +166,14 @@ def find_rss_item_by_title(db: Session, title: str, page_number: int, page_limit
     #     and_(*[models.RSSItem.title.like(f"%{word}%") for word in title.split()])
     # ).order_by(models.RSSItem.id.desc())
 
-    query = db.query(models.RSSItem).order_by(models.RSSItem.id.desc())
+    query = db.query(models.RSSItem)
 
     if title:
         query = (query.filter(text("MATCH(title) AGAINST (:search_query IN BOOLEAN MODE)"))
                  .params(search_query=' '.join(title.split())))
 
     if start_dt and end_dt:
-        query.filter(models.RSSItem.publish_datetime.between(start_dt, end_dt))
+        query = query.filter(models.RSSItem.publish_datetime.between(start_dt, end_dt))
     elif start_dt:
         query = query.filter(models.RSSItem.publish_datetime > start_dt)
     elif end_dt:
@@ -183,6 +183,8 @@ def find_rss_item_by_title(db: Session, title: str, page_number: int, page_limit
         query = query.group_by(models.RSSItem.link)
 
     length = query.count()
+
+    query = query.order_by(models.RSSItem.id.desc())
     if page_number > 0:
         query = query.offset((page_number - 1) * page_limit)
     query = query.limit(page_limit)
