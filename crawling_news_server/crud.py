@@ -117,11 +117,11 @@ def create_rss_item(db: Session, rss_id: int, rss_item: schemas.RssItemCreateDto
 def create_rss_item_from_rss_item_obj(db: Session, rss_id: int, rss_item_obj: dict[str, str]) -> Optional[RSSItem]:
     try:
         rss_item = schemas.RssItemCreateDto(
-            title=rss_item_obj.get("title", ""),
-            link=rss_item_obj.get("link", ""),
+            title=rss_item_obj.get("title", "")[:1024],
+            link=rss_item_obj.get("link", "")[:768],
             description="",
-            guid=rss_item_obj.get("link", ""),
-            pub_date=datetime.datetime.utcnow().isoformat(),
+            guid=rss_item_obj.get("link", "")[:1024],
+            pub_date=datetime.datetime.utcnow().isoformat()[:128],
         )
 
         try:
@@ -131,7 +131,7 @@ def create_rss_item_from_rss_item_obj(db: Session, rss_id: int, rss_item_obj: di
 
         rss_item.description = html.unescape(rss_item_obj.get("summary", ""))
         rss_item.author = rss_item_obj.get("author", None)
-        rss_item.category = rss_item_obj.get("category", None)
+        rss_item.category = rss_item_obj.get("category", "")[:1024] if rss_item_obj.get("category", None) else None
         rss_item.pub_date = rss_item_obj.get("published", None)
 
         return create_rss_item(db, rss_id, rss_item)
@@ -173,7 +173,7 @@ def find_rss_item_by_title(db: Session, title: str, page_number: int, page_limit
                  .params(search_query=' '.join(title.split())))
 
     if start_dt and end_dt:
-        query.filter(and_(models.RSSItem.publish_datetime > start_dt, models.RSSItem.publish_datetime < end_dt))
+        query.filter(models.RSSItem.publish_datetime.between(start_dt, end_dt))
     elif start_dt:
         query = query.filter(models.RSSItem.publish_datetime > start_dt)
     elif end_dt:
