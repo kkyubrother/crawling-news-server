@@ -166,7 +166,7 @@ def find_rss_item_by_title(db: Session, title: str, page_number: int, page_limit
     #     and_(*[models.RSSItem.title.like(f"%{word}%") for word in title.split()])
     # ).order_by(models.RSSItem.id.desc())
 
-    query = db.query(models.RSSItem)
+    query = db.query(models.RSSItem).order_by(models.RSSItem.id.desc())
 
     if title:
         query = (query.filter(text("MATCH(title) AGAINST (:search_query IN BOOLEAN MODE)"))
