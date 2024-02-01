@@ -18,7 +18,6 @@ def response_to_text(url: str, response: requests.Response) -> str:
     elif parsed_url.netloc == 'sport.chosun.com':
         response.encoding = 'utf-8'
         text = response.text
-    # elif parsed_url.netloc == 'rss.edaily.co.kr':
     elif response.content.startswith(b'\xef\xbb\xbf'):
         text = response.content.lstrip(b'\xef\xbb\xbf').decode('utf-8').strip()
     else:

@@ -1,8 +1,13 @@
-__version__ = '0.2.0'
+__version__ = '0.3.0'
 __description__ = """# 목적
 개인을 위한 뉴스 수집과 검색 서비스
 
 # 버전
+<details>
+<summary>[2024-02-01] v0.3.0</summary>
+
+* 날짜 정보 반영
+</details>
 <details>
 <summary>[2024-01-27] v0.2.0</summary>
 

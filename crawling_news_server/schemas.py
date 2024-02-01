@@ -51,6 +51,9 @@ class RssItemDto(BaseModel):
     enclosure: Optional[str] = Field(default=None)
     guid: Optional[str] = Field(default=None)
     pub_date: Optional[str] = Field(default=None)
+    publish_date: Optional[str] = Field(default=None)
+    publish_time: Optional[str] = Field(default=None)
+    publish_datetime: Optional[datetime.datetime] = Field(default=None)
     source: Optional[str] = Field(default=None)
 
     extra: Optional[str] = Field(default=None)

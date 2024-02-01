@@ -3,13 +3,14 @@ from __future__ import annotations
 import html
 import logging
 import datetime
-from typing import List, Type, Union, Dict
+from typing import List, Type, Union, Dict, Optional
 
 from sqlalchemy.orm import Session
 from sqlalchemy import and_, or_, text
 
 from . import models, schemas
 from .models import RSS, RSSItem
+from crawling_news_server.crawl import pub_date_to_dt
 
 
 logger = logging.getLogger(__name__)
@@ -93,13 +94,27 @@ def create_rss_item(db: Session, rss_id: int, rss_item: schemas.RssItemCreateDto
         source=rss_item.source,
         extra=rss_item.extra,
     )
+
+    if rss_item.pub_date:
+        try:
+            if dt := pub_date_to_dt.parse_date(rss_item.pub_date):
+                db_rss_item.publish_date = dt.date().isoformat()
+                db_rss_item.publish_time = dt.time().isoformat()
+                db_rss_item.publish_datetime = dt
+            else:
+                logger.error(f"error pub_date_to_dt: {rss_item.pub_date}")
+
+        except Exception as e:
+            logger.error(e)
+            logger.error(f"error pub_date_to_dt: {rss_item.pub_date}")
+
     db.add(db_rss_item)
     db.commit()
     db.refresh(db_rss_item)
     return db_rss_item
 
 
-def create_rss_item_from_rss_item_obj(db: Session, rss_id: int, rss_item_obj: dict[str, str]) -> bool:
+def create_rss_item_from_rss_item_obj(db: Session, rss_id: int, rss_item_obj: dict[str, str]) -> Optional[RSSItem]:
     try:
         rss_item = schemas.RssItemCreateDto(
             title=rss_item_obj.get("title", ""),
@@ -118,12 +133,13 @@ def create_rss_item_from_rss_item_obj(db: Session, rss_id: int, rss_item_obj: di
         rss_item.author = rss_item_obj.get("author", None)
         rss_item.category = rss_item_obj.get("category", None)
         rss_item.pub_date = rss_item_obj.get("published", None)
-        create_rss_item(db, rss_id, rss_item)
 
-        return True
+        return create_rss_item(db, rss_id, rss_item)
+
     except Exception as e:
         logger.error(f"[{rss_id:<10}]: rss_item error: {e}")
-    return False
+    return None
+    # return False
 
 
 def create_rss_response_record(db: Session, rss_id: int, link: str, body: str, status_code: int = 200):
@@ -140,17 +156,28 @@ def create_rss_response_record(db: Session, rss_id: int, link: str, body: str, s
     return db_response_record
 
 
-def find_rss_item_by_title(db: Session, title: str, page_number: int, page_limit: int, distinct: bool) -> dict[str, Union[int, list[Type[models.RSSItem]]]]:
+def find_rss_item_by_title(db: Session, title: str, page_number: int, page_limit: int, distinct: bool, start_dt: Optional[datetime.datetime] = None, end_dt: Optional[datetime.datetime] = None) -> dict[str, Union[int, list[Type[models.RSSItem]]]]:
     """
     https://gist.github.com/jas-haria/a993d4ef213b3c0dd1500f86d31ad749
     https://stackoverflow.com/questions/4186062/sqlalchemy-order-by-descending
 
     """
-    query = db.query(models.RSSItem).filter(
-        and_(*[models.RSSItem.title.like(f"%{word}%") for word in title.split()])
-    ).order_by(models.RSSItem.id.desc())
+    # query = db.query(models.RSSItem).filter(
+    #     and_(*[models.RSSItem.title.like(f"%{word}%") for word in title.split()])
+    # ).order_by(models.RSSItem.id.desc())
 
-    query = db.query(models.RSSItem).filter(text("MATCH(title) AGAINST (:search_query IN BOOLEAN MODE)")).params(search_query=' '.join(title.split()))
+    query = db.query(models.RSSItem)
+
+    if title:
+        query = (query.filter(text("MATCH(title) AGAINST (:search_query IN BOOLEAN MODE)"))
+                 .params(search_query=' '.join(title.split())))
+
+    if start_dt and end_dt:
+        query.filter(and_(models.RSSItem.publish_datetime > start_dt, models.RSSItem.publish_datetime < end_dt))
+    elif start_dt:
+        query = query.filter(models.RSSItem.publish_datetime > start_dt)
+    elif end_dt:
+        query = query.filter(models.RSSItem.publish_datetime < end_dt)
 
     if distinct:
         query = query.group_by(models.RSSItem.link)
