@@ -131,7 +131,7 @@ def create_rss_item_from_rss_item_obj(db: Session, rss_id: int, rss_item_obj: di
 
         rss_item.description = html.unescape(rss_item_obj.get("summary", ""))
         rss_item.author = rss_item_obj.get("author", None)
-        rss_item.category = rss_item_obj.get("category", "")[:1024] if rss_item_obj.get("category", None) else None
+        rss_item.category = rss_item_obj.get("category", "")[:512] if rss_item_obj.get("category", None) else None
         rss_item.pub_date = rss_item_obj.get("published", None)
 
         return create_rss_item(db, rss_id, rss_item)
