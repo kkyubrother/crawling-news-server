@@ -18,6 +18,10 @@ alembic upgrade head
 # Todo
 * [x] schema 수정
 * [x] 검색 속도 개선
+  * [x] 검색 대상이 되는 모든 컬럼에 인덱스 도입
+    * 기존에는 1분이 넘어 timeout이 발생하던 쿼리가 10초 이내로 끝남
+    * 문자열에는 index 뿐만 아니라 fulltext 검색을 도입
+    * 날짜값도 인덱스 적용하면 좋음
 
 
 ### 주의사항

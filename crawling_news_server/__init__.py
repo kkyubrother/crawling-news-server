@@ -4,6 +4,11 @@ __description__ = """# 목적
 
 # 버전
 <details>
+<summary>[2024-02-03] v0.3.1</summary>
+
+* DB 인덱스 적용
+</details>
+<details>
 <summary>[2024-02-01] v0.3.0</summary>
 
 * 날짜 정보 반영

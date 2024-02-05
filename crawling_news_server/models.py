@@ -90,7 +90,9 @@ class RSSItem(Base):
 
     publish_date: Mapped[str] = mapped_column(String(11), default="", server_default="")
     publish_time: Mapped[str] = mapped_column(String(22), default="", server_default="")
-    publish_datetime: Mapped[Optional[datetime]] = mapped_column(DateTime, default=func.now(), server_default=func.now())
+    publish_datetime: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, default=func.now(), server_default=func.now(), index=True,
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now(), server_default=func.now())
 
     rss_id: Mapped[int] = mapped_column(ForeignKey("rss.id"))
