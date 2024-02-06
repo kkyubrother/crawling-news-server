@@ -156,16 +156,16 @@ def create_rss_response_record(db: Session, rss_id: int, link: str, body: str, s
     return db_response_record
 
 
-def find_rss_item_by_title(db: Session, title: str, page_number: int, page_limit: int, distinct: bool, start_dt: Optional[datetime.datetime] = None, end_dt: Optional[datetime.datetime] = None) -> dict[str, Union[int, list[Type[models.RSSItem]]]]:
+def find_rss_item_by_title(
+        db: Session, title: str, page_number: int, page_limit: int, distinct: bool,
+        start_dt: Optional[datetime.datetime] = None, end_dt: Optional[datetime.datetime] = None,
+        white_rss_id: Optional[list[int]] = None, black_rss_id: Optional[list[int]] = None,
+) -> dict[str, Union[int, list[Type[models.RSSItem]]]]:
     """
     https://gist.github.com/jas-haria/a993d4ef213b3c0dd1500f86d31ad749
     https://stackoverflow.com/questions/4186062/sqlalchemy-order-by-descending
 
     """
-    # query = db.query(models.RSSItem).filter(
-    #     and_(*[models.RSSItem.title.like(f"%{word}%") for word in title.split()])
-    # ).order_by(models.RSSItem.id.desc())
-
     query = db.query(models.RSSItem)
 
     if title:
@@ -178,6 +178,14 @@ def find_rss_item_by_title(db: Session, title: str, page_number: int, page_limit
         query = query.filter(models.RSSItem.publish_datetime > start_dt)
     elif end_dt:
         query = query.filter(models.RSSItem.publish_datetime < end_dt)
+
+    if white_rss_id:
+        query = query.filter(models.RSSItem.rss_id.in_(white_rss_id))
+
+    elif black_rss_id:
+        query = query.filter(~models.RSSItem.rss_id.in_(black_rss_id))
+
+    logger.warning(f"{white_rss_id}, {black_rss_id}")
 
     if distinct:
         query = query.group_by(models.RSSItem.link)

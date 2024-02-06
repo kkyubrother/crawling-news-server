@@ -1,8 +1,13 @@
-__version__ = '0.3.2'
+__version__ = '0.4.0'
 __description__ = """# 목적
 개인을 위한 뉴스 수집과 검색 서비스
 
 # 버전
+<details>
+<summary>[2024-02-07] v0.4.0</summary>
+
+* item 검색시 rss_id white 또는 black 리스트 지정 가능
+</details>
 <details>
 <summary>[2024-02-03] v0.3.1</summary>
 

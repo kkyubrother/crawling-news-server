@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from crawling_news_server import crud, models, schemas, __version__, __description__
 from crawling_news_server.database import get_db, Base, engine, get_context_db
-from crawling_news_server.routers import rss
+from crawling_news_server.routers import rss, rss_items
 
 import urllib3
 
@@ -38,6 +38,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(rss.router)
+app.include_router(rss_items.router)
 
 
 @app.on_event('startup')

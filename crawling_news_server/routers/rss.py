@@ -52,14 +52,12 @@ async def read_rss_items(
 
     if start_dt:
         try:
-            # start_dt = datetime.datetime.fromisoformat(start_dt)
             datetime.datetime.fromisoformat(start_dt)
         except:
             raise HTTPException(400, "start_dt is error")
 
     if end_dt:
         try:
-            # end_dt = datetime.datetime.fromisoformat(end_dt)
             datetime.datetime.fromisoformat(end_dt)
         except:
             raise HTTPException(400, "end_dt is error")
