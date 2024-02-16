@@ -23,7 +23,13 @@ logger.setLevel(logging.INFO)
 
 jobstores = {}
 if os.environ.get("JOB_STORE"):
-    jobstores['default'] = SQLAlchemyJobStore(url=os.environ.get("JOB_DB_PATH"), engine_options={'pool_size': 100})
+    jobstores['default'] = SQLAlchemyJobStore(url=os.environ.get("JOB_DB_PATH"), engine_options={'pool_size': 100, "connect_args": {
+        "ssl": {
+            "ssl_ca": "ca.pem",
+            "ssl_cert": "client-cert.pem",
+            "ssl_key": "client-key.pem"
+        }
+    }})
 
 executors = {
     'default': ThreadPoolExecutor(50),
