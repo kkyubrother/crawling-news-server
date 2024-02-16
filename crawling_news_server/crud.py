@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import html
+import json
+import time
 import logging
 import datetime
 from typing import List, Type, Union, Dict, Optional
@@ -20,7 +22,9 @@ def get_rss(db: Session, rss_id: int) -> models.RSS | None:
     return db.query(models.RSS).filter(models.RSS.id == rss_id).first()
 
 
-def get_rss_all(db: Session) -> List[Type[RSS]]:
+def get_rss_all(db: Session, include_not_active: bool = False) -> List[Type[RSS]]:
+    if include_not_active:
+        return db.query(models.RSS).all()
     return db.query(models.RSS).filter(models.RSS.is_active == 1).all()
 
 
@@ -62,15 +66,28 @@ def update_rss_obj(db: Session, db_rss: models.RSS) -> models.RSS | None:
     return db_rss
 
 
-def update_rss_from_rss_dict(db: Session, rss_id: int, feed: Dict[str, str | None]) -> None:
+def update_rss_from_rss_dict(db: Session, rss_id: int, feed: Dict[str, str | None], extra: dict | None = None) -> None:
     db_rss = get_rss(db, rss_id)
 
     db_rss.title = feed.get("title", db_rss.title)
+    if subtitle := feed.get('subtitle'):
+        if subtitle not in db_rss.title:
+            db_rss.title = f"{db_rss.title}({subtitle})"
     db_rss.description = feed.get("description", db_rss.description)
+    db_rss.link = feed.get("link", db_rss.link)
     db_rss.language = feed.get("language", db_rss.language)
     db_rss.copyright = feed.get("rights", db_rss.copyright)
     db_rss.last_build_date = feed.get("updated", db_rss.last_build_date)
     db_rss.web_master = feed.get("publisher", db_rss.web_master)
+
+    if published := feed.get("published"):
+        db_rss.pub_date = published
+        db_rss.publish_datetime = pub_date_to_dt.parse_date(published)
+        db_rss.publish_date = db_rss.publish_datetime.date().isoformat()
+        db_rss.publish_time = db_rss.publish_datetime.time().isoformat()
+
+    if extra:
+        db_rss.extra = json.dumps(extra)
 
     return update_rss_obj(db, db_rss)
 
@@ -288,3 +305,7 @@ def read_all_rss_items(db: Session, page_number: int, page_limit: int) -> dict[s
         "total_count": length,
         "data": query.all()
     }
+
+
+def read_last_rss_item(db: Session, rss_id: int) -> Type[RSSItem] | None:
+    return db.query(models.RSSItem).filter_by(rss_id=rss_id).order_by(models.RSSItem.id.desc()).limit(1).one_or_none()

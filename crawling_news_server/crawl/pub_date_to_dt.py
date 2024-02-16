@@ -7,6 +7,7 @@ formats_to_try = [
     "%a, %d %b %Y %H:%M:%S %Z",
     "%a, %d %b %Y %H:%M:%S %z",
     "%a, %d %b %Y %H:%M:%S %z",
+    "%a %b %d %Y %H:%M:%S GMT%z (%Z)",
     "%Y.%m.%d",
     "%Y%m%d%H%M%S%z",
     "%Y-%m-%d %H:%M:%S",
@@ -30,5 +31,11 @@ def parse_date(date_string: Optional[str]) -> Optional[datetime]:
             return datetime.strptime(date_string, date_format)
         except ValueError:
             pass
+        except Exception as e:
+            print("parse_date error", date_string)
+            print("parse_date error", date_format)
+            print(e)
+            raise e
 
+    print("parse_date error", date_string)
     return None
