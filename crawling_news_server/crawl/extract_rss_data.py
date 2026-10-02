@@ -50,7 +50,9 @@ async def fetch(url: str, encoding: Optional[str] = None):
     #         except Exception as e:
     #             print(f"Status Error {url}: {e}", file=sys.stderr)
 
-    response_bytes = requests.get(url, headers=get_header(), verify=False).content
+    from crawling_news_server.crawl.network import safe_request_get
+    response, _ = safe_request_get(url, headers=get_header(), timeout=10)
+    response_bytes = response.content
 
     webpage_data = ""
     try:

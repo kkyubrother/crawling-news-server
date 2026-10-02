@@ -84,7 +84,9 @@ def crawling(rss_id: int, url: str) -> None:
             logging.error(f"[{rss_id:<10}]({url:<55}): Remove job Error {e}")
 
         try:
-            response = requests.get(url, headers=crawl.util.get_header(), verify=False)
+            response, ssl_warning = crawl.network.safe_request_get(url, headers=crawl.util.get_header(), timeout=10)
+            if ssl_warning:
+                logger.warning(f"[{rss_id:<10}]({url:<55}): Crawled with SSL verification disabled (SSL error occurred)")
             response.raise_for_status()
 
             text = crawl.response_to_text.response_to_text(url, response)

@@ -117,18 +117,26 @@ async def create_rss(rss: Annotated[
 
 @router.post("/crawl")
 async def crawl_from(url: str, db: Session = Depends(get_db)):
+    if not crawl.network.is_safe_url(url):
+        raise HTTPException(status_code=400, detail="Invalid or restricted URL")
     data = await extract_rss_urls(url)
     logger.info(data)
     return data
-    pass
 
 
 @router.post("/{rss_id}/crawl")
 async def crawl_at(rss_id: int, db: Session = Depends(get_db)):
     add_count = 0
     rss = crud.get_rss(db, rss_id)
+    if not rss:
+        raise HTTPException(status_code=404, detail="RSS not found")
 
-    response = requests.get(rss.url, headers=crawl.util.get_header(), verify=False)
+    try:
+        response, ssl_warning = crawl.network.safe_request_get(rss.url, headers=crawl.util.get_header(), timeout=10)
+    except ValueError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Request failed: {e}")
 
     text = crawl.response_to_text.response_to_text(rss.url, response)
     rss_obj = crawl.rss_fixer.fix_rss(rss.url, response.text)

@@ -21,25 +21,35 @@ load_dotenv()
 
 # https://wikidocs.net/87477
 
-SQLALCHEMY_DATABASE_URL = os.environ.get("DB_PATH")
+SQLALCHEMY_DATABASE_URL = os.environ.get("DB_PATH", "sqlite:///./news.db")
 
 connect_args = {}
-if "sqlite" in SQLALCHEMY_DATABASE_URL.split("//")[0]:
+engine_kwargs = {}
+
+if SQLALCHEMY_DATABASE_URL.startswith("sqlite"):
     connect_args['check_same_thread'] = False
 else:
-    SQLALCHEMY_DATABASE_URL = SQLALCHEMY_DATABASE_URL + '?ssl=true'
-    connect_args = {
-        "ssl": {
-            "ssl_ca": "ca.pem",
-            "ssl_cert": "client-cert.pem",
-            "ssl_key": "client-key.pem"
-        }
-    }
+    if os.environ.get("DB_USE_SSL", "true").lower() in ("true", "1", "yes"):
+        if "?" not in SQLALCHEMY_DATABASE_URL:
+            SQLALCHEMY_DATABASE_URL = SQLALCHEMY_DATABASE_URL + '?ssl=true'
+        ssl_ca = os.environ.get("DB_SSL_CA", "ca.pem")
+        ssl_cert = os.environ.get("DB_SSL_CERT", "client-cert.pem")
+        ssl_key = os.environ.get("DB_SSL_KEY", "client-key.pem")
+        ssl_config = {}
+        if os.path.exists(ssl_ca):
+            ssl_config["ssl_ca"] = ssl_ca
+        if os.path.exists(ssl_cert):
+            ssl_config["ssl_cert"] = ssl_cert
+        if os.path.exists(ssl_key):
+            ssl_config["ssl_key"] = ssl_key
+        if ssl_config:
+            connect_args["ssl"] = ssl_config
+    engine_kwargs["pool_size"] = 100
 
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL,
     connect_args=connect_args,
-    pool_size=100
+    **engine_kwargs
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

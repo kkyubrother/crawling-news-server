@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 
 
 class RssDto(BaseModel):
+    id: Optional[int] = None
     name: str
     url: str
     title: str
@@ -11,7 +12,6 @@ class RssDto(BaseModel):
     link: str
     delay: int
     category: str
-    pass
 
 
 class RssCreateDto(RssDto):
