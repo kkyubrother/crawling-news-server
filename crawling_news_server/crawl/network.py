@@ -2,22 +2,25 @@ import socket
 import ipaddress
 import logging
 from urllib.parse import urlparse, urljoin
-from contextlib import contextmanager
 import requests
-from typing import Tuple, List
+from requests.adapters import HTTPAdapter
+from urllib3.util import parse_url
+from urllib3.connection import HTTPSConnection, HTTPConnection
+from typing import Tuple
 
 logger = logging.getLogger(__name__)
 
 def is_ip_public(ip_str: str) -> bool:
     try:
         ip = ipaddress.ip_address(ip_str)
-        return not (ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_unspecified or ip.is_reserved)
+        # Use is_global to ensure it's globally routable (excludes private, loopback, link_local, CGNAT 100.64.0.0/10, reserved, etc.)
+        return ip.is_global
     except ValueError:
         return False
 
 def validate_hostname_and_resolve(hostname: str) -> str:
     """
-    Validates hostname, resolves IP addresses, checks against SSRF rules,
+    Validates hostname, resolves IP addresses, checks against SSRF rules (must be globally routable),
     and returns a validated public IP address.
     """
     if not hostname:
@@ -42,14 +45,13 @@ def validate_hostname_and_resolve(hostname: str) -> str:
     for item in addr_info:
         ip_str = item[4][0]
         if not is_ip_public(ip_str):
-            raise ValueError(f"Hostname {hostname} resolved to restricted IP: {ip_str}")
+            raise ValueError(f"Hostname {hostname} resolved to non-global/restricted IP: {ip_str}")
 
     return addr_info[0][4][0]
 
 def is_safe_url(url: str) -> bool:
     """
-    Check if a given URL targets public IP addresses only and uses http/https.
-    Blocks private IP addresses, loopback, link-local, multicast, etc.
+    Check if a given URL targets public globally routable IP addresses only and uses http/https.
     """
     try:
         parsed = urlparse(url)
@@ -61,20 +63,28 @@ def is_safe_url(url: str) -> bool:
         logger.warning(f"SSRF check failed for URL {url}: {e}")
         return False
 
-@contextmanager
-def pinned_dns(hostname: str, pinned_ip: str):
-    orig_getaddrinfo = socket.getaddrinfo
 
-    def custom_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
-        if host and host.lower() == hostname.lower():
-            return orig_getaddrinfo(pinned_ip, port, family, type, proto, flags)
-        return orig_getaddrinfo(host, port, family, type, proto, flags)
+class PinnedIPHTTPAdapter(HTTPAdapter):
+    """
+    Thread-safe HTTPAdapter that connects to a pre-validated pinned IP address
+    while preserving TLS SNI and hostname verification.
+    """
+    def __init__(self, pinned_ip: str, *args, **kwargs):
+        self.pinned_ip = pinned_ip
+        super().__init__(*args, **kwargs)
 
-    socket.getaddrinfo = custom_getaddrinfo
-    try:
-        yield
-    finally:
-        socket.getaddrinfo = orig_getaddrinfo
+    def init_poolmanager(self, *args, **kwargs):
+        kwargs['server_hostname'] = None
+        super().init_poolmanager(*args, **kwargs)
+
+    def get_connection(self, url, proxies=None):
+        conn = super().get_connection(url, proxies=proxies)
+        parsed = parse_url(url)
+        # Preserve original domain name for TLS certificate hostname verification
+        conn.assert_hostname = parsed.host
+        # Override destination host for TCP socket connection
+        conn.host = self.pinned_ip
+        return conn
 
 
 def _request_get_with_redirect_check(url: str, headers: dict = None, timeout: int = 10, verify: bool = True, max_redirects: int = 5) -> requests.Response:
@@ -87,27 +97,27 @@ def _request_get_with_redirect_check(url: str, headers: dict = None, timeout: in
         hostname = parsed.hostname
         pinned_ip = validate_hostname_and_resolve(hostname)
 
-        with pinned_dns(hostname, pinned_ip):
-            response = requests.get(current_url, headers=headers, timeout=timeout, verify=verify, allow_redirects=False)
+        session = requests.Session()
+        adapter = PinnedIPHTTPAdapter(pinned_ip)
+        session.mount("http://", adapter)
+        session.mount("https://", adapter)
+
+        response = session.get(current_url, headers=headers, timeout=timeout, verify=verify, allow_redirects=False)
 
         if response.is_redirect or response.is_permanent_redirect:
             location = response.headers.get('location')
             if not location:
-                break
+                return response
             current_url = urljoin(current_url, location)
         else:
             return response
 
-    parsed = urlparse(current_url)
-    hostname = parsed.hostname
-    pinned_ip = validate_hostname_and_resolve(hostname)
-    with pinned_dns(hostname, pinned_ip):
-        return requests.get(current_url, headers=headers, timeout=timeout, verify=verify, allow_redirects=False)
+    raise requests.exceptions.TooManyRedirects(f"Exceeded maximum redirects ({max_redirects}) for URL: {url}")
 
 
 def safe_request_get(url: str, headers: dict = None, timeout: int = 10) -> Tuple[requests.Response, bool]:
     """
-    Executes an HTTP GET request with SSRF check, DNS rebinding prevention, default timeout, manual redirect validation, and SSL fallback.
+    Executes an HTTP GET request with SSRF check, thread-safe IP pinning, default timeout, manual redirect validation, and SSL fallback.
     """
     ssl_warning = False
     try:
