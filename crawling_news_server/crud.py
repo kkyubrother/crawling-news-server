@@ -186,8 +186,14 @@ def find_rss_item_by_title(
     query = db.query(models.RSSItem)
 
     if title:
-        query = (query.filter(text("MATCH(title) AGAINST (:search_query IN BOOLEAN MODE)"))
-                 .params(search_query=' '.join(title.split())))
+        dialect_name = db.bind.dialect.name if db.bind else 'sqlite'
+        if dialect_name == 'mysql':
+            query = (query.filter(text("MATCH(title) AGAINST (:search_query IN BOOLEAN MODE)"))
+                     .params(search_query=' '.join(title.split())))
+        else:
+            words = title.split()
+            for word in words:
+                query = query.filter(models.RSSItem.title.like(f"%{word}%"))
 
     if start_dt and end_dt:
         query = query.filter(models.RSSItem.publish_datetime.between(start_dt, end_dt))

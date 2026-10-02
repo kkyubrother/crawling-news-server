@@ -7,7 +7,9 @@ from sqlalchemy import ForeignKey, String, Text, DateTime, text, Engine
 from sqlalchemy.orm import Mapped
 from sqlalchemy.orm import mapped_column
 from sqlalchemy.orm import relationship
-from sqlalchemy.dialects.mysql.types import LONGTEXT
+from sqlalchemy.dialects.mysql import LONGTEXT as MYSQL_LONGTEXT
+
+LONGTEXT = Text().with_variant(MYSQL_LONGTEXT, "mysql")
 from sqlalchemy.inspection import inspect
 
 from .database import Base
@@ -100,10 +102,11 @@ class RSSItem(Base):
 
     @classmethod
     def create_fulltext_index(cls, engine: Engine):
+        if engine.dialect.name == 'sqlite':
+            return
         index_name = 'title_fulltext_index'
         inspector = inspect(engine)
         with engine.connect() as conn:
-            # if not engine.dialect.has_index(conn, index_name, cls.__tablename__):
             if not any(index['name'] == index_name for index in inspector.get_indexes(cls.__tablename__)):
                 index_query = text(f'CREATE FULLTEXT INDEX {index_name} ON {cls.__tablename__} (title)')
                 conn.execute(index_query)
