@@ -2,10 +2,49 @@ import socket
 import ipaddress
 import logging
 from urllib.parse import urlparse, urljoin
+from contextlib import contextmanager
 import requests
-from typing import Tuple
+from typing import Tuple, List
 
 logger = logging.getLogger(__name__)
+
+def is_ip_public(ip_str: str) -> bool:
+    try:
+        ip = ipaddress.ip_address(ip_str)
+        return not (ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_unspecified or ip.is_reserved)
+    except ValueError:
+        return False
+
+def validate_hostname_and_resolve(hostname: str) -> str:
+    """
+    Validates hostname, resolves IP addresses, checks against SSRF rules,
+    and returns a validated public IP address.
+    """
+    if not hostname:
+        raise ValueError("Empty or missing hostname")
+
+    if hostname.lower() in ('localhost', 'localhost.localdomain', 'loopback'):
+        raise ValueError(f"Restricted hostname: {hostname}")
+
+    # Check if hostname itself is an IP address
+    try:
+        ip = ipaddress.ip_address(hostname)
+        if not is_ip_public(str(ip)):
+            raise ValueError(f"IP {hostname} is restricted")
+        return str(ip)
+    except ValueError:
+        pass
+
+    addr_info = socket.getaddrinfo(hostname, None)
+    if not addr_info:
+        raise ValueError(f"Failed to resolve hostname: {hostname}")
+
+    for item in addr_info:
+        ip_str = item[4][0]
+        if not is_ip_public(ip_str):
+            raise ValueError(f"Hostname {hostname} resolved to restricted IP: {ip_str}")
+
+    return addr_info[0][4][0]
 
 def is_safe_url(url: str) -> bool:
     """
@@ -16,41 +55,40 @@ def is_safe_url(url: str) -> bool:
         parsed = urlparse(url)
         if parsed.scheme not in ('http', 'https'):
             return False
-
-        hostname = parsed.hostname
-        if not hostname:
-            return False
-
-        # Disallow explicit localhost names
-        if hostname.lower() in ('localhost', 'localhost.localdomain', 'loopback'):
-            return False
-
-        # Resolve hostname to IP addresses
-        # getaddrinfo returns tuples: (family, type, proto, canonname, sockaddr)
-        addr_info = socket.getaddrinfo(hostname, None)
-        if not addr_info:
-            return False
-
-        for item in addr_info:
-            ip_str = item[4][0]
-            ip = ipaddress.ip_address(ip_str)
-            if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast or ip.is_unspecified or ip.is_reserved:
-                logger.warning(f"SSRF blocked: URL {url} resolved to non-public IP {ip_str}")
-                return False
-
+        validate_hostname_and_resolve(parsed.hostname)
         return True
     except Exception as e:
         logger.warning(f"SSRF check failed for URL {url}: {e}")
         return False
 
+@contextmanager
+def pinned_dns(hostname: str, pinned_ip: str):
+    orig_getaddrinfo = socket.getaddrinfo
+
+    def custom_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
+        if host and host.lower() == hostname.lower():
+            return orig_getaddrinfo(pinned_ip, port, family, type, proto, flags)
+        return orig_getaddrinfo(host, port, family, type, proto, flags)
+
+    socket.getaddrinfo = custom_getaddrinfo
+    try:
+        yield
+    finally:
+        socket.getaddrinfo = orig_getaddrinfo
+
 
 def _request_get_with_redirect_check(url: str, headers: dict = None, timeout: int = 10, verify: bool = True, max_redirects: int = 5) -> requests.Response:
     current_url = url
     for _ in range(max_redirects):
-        if not is_safe_url(current_url):
-            raise ValueError(f"URL {current_url} is unsafe or targets a restricted address (SSRF protection).")
+        parsed = urlparse(current_url)
+        if parsed.scheme not in ('http', 'https'):
+            raise ValueError(f"Unsupported URL scheme: {parsed.scheme}")
 
-        response = requests.get(current_url, headers=headers, timeout=timeout, verify=verify, allow_redirects=False)
+        hostname = parsed.hostname
+        pinned_ip = validate_hostname_and_resolve(hostname)
+
+        with pinned_dns(hostname, pinned_ip):
+            response = requests.get(current_url, headers=headers, timeout=timeout, verify=verify, allow_redirects=False)
 
         if response.is_redirect or response.is_permanent_redirect:
             location = response.headers.get('location')
@@ -60,21 +98,16 @@ def _request_get_with_redirect_check(url: str, headers: dict = None, timeout: in
         else:
             return response
 
-    if not is_safe_url(current_url):
-        raise ValueError(f"URL {current_url} is unsafe or targets a restricted address (SSRF protection).")
-
-    return requests.get(current_url, headers=headers, timeout=timeout, verify=verify, allow_redirects=False)
+    parsed = urlparse(current_url)
+    hostname = parsed.hostname
+    pinned_ip = validate_hostname_and_resolve(hostname)
+    with pinned_dns(hostname, pinned_ip):
+        return requests.get(current_url, headers=headers, timeout=timeout, verify=verify, allow_redirects=False)
 
 
 def safe_request_get(url: str, headers: dict = None, timeout: int = 10) -> Tuple[requests.Response, bool]:
     """
-    Executes an HTTP GET request with SSRF check, default timeout, manual redirect validation, and SSL fallback.
-
-    1. Validates each URL in redirect chain against SSRF rules.
-    2. Tries request with SSL verification (verify=True).
-    3. If SSLError or ConnectionError occurs, falls back to verify=False and logs warning.
-
-    Returns (response, ssl_warning_triggered).
+    Executes an HTTP GET request with SSRF check, DNS rebinding prevention, default timeout, manual redirect validation, and SSL fallback.
     """
     ssl_warning = False
     try:
