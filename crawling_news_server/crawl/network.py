@@ -1,7 +1,7 @@
 import socket
 import ipaddress
 import logging
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urljoin
 import requests
 from typing import Tuple
 
@@ -44,25 +44,44 @@ def is_safe_url(url: str) -> bool:
         return False
 
 
+def _request_get_with_redirect_check(url: str, headers: dict = None, timeout: int = 10, verify: bool = True, max_redirects: int = 5) -> requests.Response:
+    current_url = url
+    for _ in range(max_redirects):
+        if not is_safe_url(current_url):
+            raise ValueError(f"URL {current_url} is unsafe or targets a restricted address (SSRF protection).")
+
+        response = requests.get(current_url, headers=headers, timeout=timeout, verify=verify, allow_redirects=False)
+
+        if response.is_redirect or response.is_permanent_redirect:
+            location = response.headers.get('location')
+            if not location:
+                break
+            current_url = urljoin(current_url, location)
+        else:
+            return response
+
+    if not is_safe_url(current_url):
+        raise ValueError(f"URL {current_url} is unsafe or targets a restricted address (SSRF protection).")
+
+    return requests.get(current_url, headers=headers, timeout=timeout, verify=verify, allow_redirects=False)
+
+
 def safe_request_get(url: str, headers: dict = None, timeout: int = 10) -> Tuple[requests.Response, bool]:
     """
-    Executes an HTTP GET request with SSRF check, default timeout, and SSL fallback.
+    Executes an HTTP GET request with SSRF check, default timeout, manual redirect validation, and SSL fallback.
 
-    1. Validates URL against SSRF rules.
+    1. Validates each URL in redirect chain against SSRF rules.
     2. Tries request with SSL verification (verify=True).
-    3. If SSLError or CertificateError occurs, falls back to verify=False and logs warning.
+    3. If SSLError or ConnectionError occurs, falls back to verify=False and logs warning.
 
     Returns (response, ssl_warning_triggered).
     """
-    if not is_safe_url(url):
-        raise ValueError(f"URL {url} is unsafe or targets a restricted address (SSRF protection).")
-
     ssl_warning = False
     try:
-        response = requests.get(url, headers=headers, timeout=timeout, verify=True)
+        response = _request_get_with_redirect_check(url, headers=headers, timeout=timeout, verify=True)
         return response, ssl_warning
-    except (requests.exceptions.SSLError, requests.exceptions.CertificateError) as ssl_err:
-        logger.warning(f"SSL verification failed for {url}: {ssl_err}. Retrying with verify=False...")
+    except (requests.exceptions.SSLError, requests.exceptions.ConnectionError) as ssl_err:
+        logger.warning(f"SSL verification/connection failed for {url}: {ssl_err}. Retrying with verify=False...")
         ssl_warning = True
-        response = requests.get(url, headers=headers, timeout=timeout, verify=False)
+        response = _request_get_with_redirect_check(url, headers=headers, timeout=timeout, verify=False)
         return response, ssl_warning

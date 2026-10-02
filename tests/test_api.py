@@ -48,7 +48,18 @@ def test_hello(client):
     assert response.json() == {"message": "Hello world"}
 
 
-def test_ssrf_protection():
+def test_ssrf_protection(monkeypatch):
+    import socket
+
+    orig_getaddrinfo = socket.getaddrinfo
+
+    def mock_getaddrinfo(host, port, *args, **kwargs):
+        if host == "google.com":
+            return [(socket.AF_INET, socket.SOCK_STREAM, 6, '', ('93.184.216.34', port or 80))]
+        return orig_getaddrinfo(host, port, *args, **kwargs)
+
+    monkeypatch.setattr(socket, "getaddrinfo", mock_getaddrinfo)
+
     assert is_safe_url("http://127.0.0.1") is False
     assert is_safe_url("http://localhost:8000") is False
     assert is_safe_url("http://10.0.0.1") is False
